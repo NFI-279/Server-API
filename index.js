@@ -4,6 +4,7 @@ const express = require("express");
 const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
+const semver = require('semver');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -20,6 +21,12 @@ const activationLimiter = rateLimit({ // Used to rate limit against potential br
     message: { error: 'Too many activation attempts from this IP, please try again after an hour.' },
     standardHeaders: true,
     legacyHeaders: false,
+});
+
+const versionCheckLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100, // Allow 100 requests per 15 minutes from one IP
+    message: { error: 'Too many requests. Please try again later.' }
 });
 
 function validateInputs(hwid, license){ // Function used for Input Validation against server crashes
@@ -94,6 +101,45 @@ app.post(`/api/activate`, activationLimiter, async (req, res) => {
     } catch (error) {
         console.error("Something went wrong with the activation process:", error);
         return res.status(500).json({ error: "An internal server error occurred." });
+
+    } finally {
+        if (client) {
+            client.release();
+            console.log("Database connection released");
+        }
+    }
+});
+
+app.get(`/api/version-check`, versionCheckLimiter, async(req, res) =>{
+    const client_version = req.query.version;
+    let client;
+    try{
+        client = await pool.connect();
+        const getLoaderInformation = 'SELECT latest_version, download_url FROM product WHERE name = $1';
+        const result = await client.query(getLoaderInformation, ['loader']);
+
+        if(result.rows.length === 0)
+            return res.status(404).json({ error: 'Loader entry not found in the database'});    
+
+        const loader_version = result.rows[0].latest_version;
+        const loader_url = result.rows[0].download_url;
+
+        if (!semver.valid(client_version))
+            return res.status(400).json({ error: 'Invalid version format.' });
+        if (semver.gt(client_version, loader_version)) { // Client's version is GREATER THAN the server's latest version which is a problem
+            return res.status(409).json({ error: 'Client version is ahead of server. Please use the official loader.' });
+        } else if (semver.lt(client_version, loader_version)) { // Client's version is LESS THAN the server's latest version which means update is required
+            return res.json({
+                status: 'update_required',
+                latest_version: loader_version,
+                download_url: loader_url
+            });
+        } else { // Client and server version match
+            return res.json({ status: 'ok' });
+        }
+
+    } catch (error) {
+        console.error("Something went wrong", error);
 
     } finally {
         if (client) {
