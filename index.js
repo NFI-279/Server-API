@@ -5,6 +5,8 @@ const { Pool } = require('pg');
 const rateLimit = require('express-rate-limit');
 const jwt = require('jsonwebtoken');
 const semver = require('semver');
+const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
@@ -14,6 +16,8 @@ const pool = new Pool({
     rejectUnauthorized: false // Required for Supabase connections
   }
 });
+
+const activationCache = new Map(); // Defined cache
 
 const activationLimiter = rateLimit({ // Used to rate limit against potential brute-force attacks
     windowMs: 60 * 60 * 1000, // 1 hour window
@@ -35,11 +39,33 @@ function validateInputs(hwid, license){ // Function used for Input Validation ag
     return true;
 }
 
+
 app.use(express.json());
 
-app.post(`/api/activate`, activationLimiter, async (req, res) => {
-    const { license, hwid } = req.body;
+app.post(`/api/v1/activate`, activationLimiter, async (req, res) => {
+    const { license, hwid, activation_secret } = req.body;
     let client;
+    let client_ip = req.ip;
+
+    try{
+        const cachedData = activationCache.get(client_ip); // Store the data from the ip address that sent the request
+
+        if (!cachedData || Date.now() > cachedData.expires) { // If the token expired - the 5 minutes have passed between the version check and the user attempting to activate their license
+            activationCache.delete(client_ip); // Clean up expired entry
+            return res.status(403).json({ error: 'Activation session expired or invalid. Please restart the loader.' });
+        }
+        const isMatch = await bcrypt.compare(activation_secret, cachedData.hash); // compare the two secrets, the hashed activation secret and the hash of the one we received in this post request
+
+        if(!isMatch) // If they do not match    
+            return res.status(403).json({ error: 'Invalid activation token.' });
+
+        activationCache.delete(client_ip); // Delete the entry for that ip
+        console.log(`Successfully validated activation secret for IP: ${client_ip}`);
+
+    } catch (validationError) {
+        console.error("Error during activation secret validation:", validationError);
+        return res.status(500).json({ error: "An internal server error occurred." });
+    }
 
     if(!validateInputs(hwid, license))
         return res.status(400).json({error: 'Bad request. The HWID or License are incorrect.'});
@@ -110,8 +136,9 @@ app.post(`/api/activate`, activationLimiter, async (req, res) => {
     }
 });
 
-app.get(`/api/version-check`, versionCheckLimiter, async(req, res) =>{
+app.get(`/api/v1/version-check`, versionCheckLimiter, async(req, res) =>{
     const client_version = req.query.version;
+    const client_ip = req.ip;
     let client;
     try{
         client = await pool.connect();
@@ -135,7 +162,20 @@ app.get(`/api/version-check`, versionCheckLimiter, async(req, res) =>{
                 download_url: loader_url
             });
         } else { // Client and server version match
-            return res.json({ status: 'ok' });
+            const randomSecret = crypto.randomBytes(16).toString('hex'); // Generate a random string with crypto
+            const hashedSecret = await bcrypt.hash(randomSecret, 10); // Hash the generated string with bycrypt
+
+            const expirationTime = Date.now() + (5 * 60 * 1000); // 5 minutes
+
+            activationCache.set(client_ip, { hash: hashedSecret, expires: expirationTime }); // Store the hashed secret in our cache along the expiration time for the Ip address from where the request came
+
+            console.log("Random secret : ", randomSecret, " and hashed secret : ", hashedSecret);
+            console.log(`Generated secret for IP ${client_ip}`);
+
+            return res.json({ 
+                status: 'ok',
+                activation_secret: randomSecret
+            });
         }
 
     } catch (error) {
