@@ -6,7 +6,6 @@ const authenticateToken = require('../middleware/authenticate');
 router.post('/sync', authenticateToken, async (req, res) => {
 
     const userId = req.user.userId;
-
     console.log(`Sync request received for authenticated user ID: ${userId}`);
 
     let client;
@@ -38,7 +37,7 @@ router.post('/sync', authenticateToken, async (req, res) => {
             };
         });
 
-        return res.json({ subscriptions: subscriptionsForClient });
+       return res.json(subscriptionsForClient);
     } catch (error) {
         console.error(`Error during sync for user ${userId}:`, error);
         return res.status(500).json({ error: 'An internal server error occurred.' });
