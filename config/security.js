@@ -1,10 +1,10 @@
 const rateLimit = require('express-rate-limit');
 
-const activationCache = new Map();
+const hashCache = new Map();
 
 const activationLimiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 1 hour
-    max: 10,
+    max: 15,
     message: { error: 'Too many activation attempts from this IP, please try again after an hour.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -12,7 +12,7 @@ const activationLimiter = rateLimit({
 
 const versionCheckLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,
+    max: 15,
     message: { error: 'Too many requests. Please try again later.' }
 });
 
@@ -23,7 +23,7 @@ function validateInputs(hwid, license){
 }
 
 module.exports = {
-    activationCache,
+    hashCache,
     activationLimiter,
     versionCheckLimiter,
     validateInputs

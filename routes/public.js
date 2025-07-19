@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../config/database.js');
-const { activationCache, validateInputs, activationLimiter, versionCheckLimiter } = require('../config/security');
+const { hashCache, validateInputs, activationLimiter, versionCheckLimiter } = require('../config/security');
 const jwt = require('jsonwebtoken');
 const semver = require('semver');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
-
+const validateHandshake = require('../middleware/validateHandshake.js')
 
 router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
     const client_version = req.query.version;
@@ -48,13 +48,14 @@ router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
 
         const randomSecret = crypto.randomBytes(16).toString('hex');
         const hashedSecret = await bcrypt.hash(randomSecret, 10);
-        const expirationTime = Date.now() + (5 * 60 * 1000);
+        const expirationTime = Date.now() + (1 * 60 * 1000);
+        const PURPOSE_TOKEN = 'version-check';
 
-        activationCache.set(client_ip, { hash: hashedSecret, expires: expirationTime });
+        hashCache.set(client_ip, { hash: hashedSecret, expires: expirationTime, purpose: PURPOSE_TOKEN });
         console.log(`Generated secret for IP ${client_ip}`);
         return res.json({
-            status: 'ok',
-            activation_secret: randomSecret
+           // status: 'ok',
+            handshake_token: randomSecret,
         });
     } catch (error) {
         console.error("Error in /version-check:", error);
@@ -65,22 +66,12 @@ router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
 });
 
 
-router.post(`/activate`, activationLimiter, async (req, res) => {
-    const { license, hwid, activation_secret } = req.body;
+router.post(`/activate`, activationLimiter, validateHandshake('version-check'), async (req, res) => {
+    const { license, hwid} = req.body;
     const client_ip = req.ip;
     let client;
 
     try {
-        const cachedData = activationCache.get(client_ip);
-        if (!cachedData || Date.now() > cachedData.expires) {
-            activationCache.delete(client_ip);
-            return res.status(403).json({ error: 'Activation session expired or invalid. Please restart the loader.' });
-        }
-        const isMatch = await bcrypt.compare(activation_secret, cachedData.hash);
-        if (!isMatch)
-            return res.status(403).json({ error: 'Invalid activation token.' });
-
-        activationCache.delete(client_ip);
         if (!validateInputs(hwid, license))
             return res.status(400).json({ error: 'Bad request. The HWID or License are incorrect.' });
 

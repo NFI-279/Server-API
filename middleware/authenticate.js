@@ -4,7 +4,6 @@ function authenticateToken(req, res, next) {
     // Get the token from the "Authorization: Bearer <TOKEN>" header
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
-
     if (token == null) {
         return res.status(401).json({ error: 'Unauthorized: No token provided.' });
     }
@@ -18,7 +17,7 @@ function authenticateToken(req, res, next) {
         }
 
         req.user = decodedPayload;
-
+        
         next();
 
     } catch (error) {
