@@ -3,8 +3,9 @@ const router = express.Router();
 const pool = require('../config/database');
 const authenticateToken = require('../middleware/authenticate');
 const validateHandshake = require('../middleware/validateHandshake');
+const {PURPOSE_AWAITING_SYNC} = require('../config/handshake');
 
-router.post('/sync', validateHandshake('version-check'), authenticateToken, async (req, res) => {
+router.post('/sync', validateHandshake(PURPOSE_AWAITING_SYNC), authenticateToken, async (req, res) => {
 
     const userId = req.user.userId;
     console.log(`Sync request received for authenticated user ID: ${userId}`);

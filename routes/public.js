@@ -7,14 +7,18 @@ const semver = require('semver');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const validateHandshake = require('../middleware/validateHandshake.js')
+const { generateHandshake, PURPOSE_AWAITING_SYNC, PURPOSE_AWAITING_ACTIVATION } = require('../config/handshake');
 
 router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
     const client_version = req.query.version;
     const client_checksum = req.query.checksum;
     const client_ip = req.ip;
+    const intent = req.query.intent;
 
-    if (!client_version || !client_checksum) {
-        return res.status(400).json({ error: 'Version and checksum parameters are required.' });
+    let purpose;
+
+    if (!client_version || !client_checksum || !intent) {
+        return res.status(400).json({ error: 'Version, checksum and intent parameters are required.' });
     }
 
     let client;
@@ -46,17 +50,17 @@ router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
         if (client_checksum !== loader_checksum)
             return res.status(403).json({ error: 'File integrity check failed. Please re-download the application.' });
 
-        const randomSecret = crypto.randomBytes(16).toString('hex');
-        const hashedSecret = await bcrypt.hash(randomSecret, 10);
-        const expirationTime = Date.now() + (1 * 60 * 1000);
-        const PURPOSE_TOKEN = 'version-check';
+        if(intent == 'sync')
+            purpose = PURPOSE_AWAITING_SYNC;
+        else if(intent == 'activate')
+            purpose = PURPOSE_AWAITING_ACTIVATION;
+        else
+            return res.status(400).json({ error: 'Invalid request intent'});
 
-        hashCache.set(client_ip, { hash: hashedSecret, expires: expirationTime, purpose: PURPOSE_TOKEN });
-        console.log(`Generated secret for IP ${client_ip}`);
-        return res.json({
-           // status: 'ok',
-            handshake_token: randomSecret,
-        });
+        const plainTextToken = await generateHandshake(client_ip, purpose);
+        console.log(`Generated '${purpose}' token for IP ${client_ip}`);
+        return res.json({ handshake_token: plainTextToken });
+
     } catch (error) {
         console.error("Error in /version-check:", error);
         return res.status(500).json({ error: "An internal server error occurred." });
@@ -66,7 +70,7 @@ router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
 });
 
 
-router.post(`/activate`, activationLimiter, validateHandshake('version-check'), async (req, res) => {
+router.post(`/activate`, activationLimiter, validateHandshake(PURPOSE_AWAITING_ACTIVATION), async (req, res) => {
     const { license, hwid} = req.body;
     const client_ip = req.ip;
     let client;
