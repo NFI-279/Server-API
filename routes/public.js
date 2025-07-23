@@ -101,6 +101,16 @@ router.post(`/activate`, activationLimiter, validateHandshake(PURPOSE_AWAITING_A
             return res.status(403).json({ error: 'This license has already been used or is not active.' });
         }
 
+        const checkForExistingQuery = 'SELECT l.id FROM license l JOIN activation a ON l.id = a.license_id WHERE l.user_id = $1 AND l.product_id = $2 AND l.status = $3';
+        const existingResult = await client.query(checkForExistingQuery, [foundLicense.user_id, foundLicense.product_id, 'used']);
+
+         if (existingResult.rows.length > 0) { // The user already has an active license for this product
+            await client.query('ROLLBACK');
+            return res.status(403).json({ 
+                error: 'You already have an active subscription for this product. To extend it, please use the renewal option on our website.' 
+            });
+        }
+
         const updateQuery = 'UPDATE license SET status = $1 WHERE key = $2';
         await client.query(updateQuery, ['used', license]);
         const activationQuery = 'INSERT INTO activation (hwid, license_id, activated_at) VALUES ($1, $2, CURRENT_DATE) RETURNING id';
@@ -114,12 +124,31 @@ router.post(`/activate`, activationLimiter, validateHandshake(PURPOSE_AWAITING_A
         const sessionToken = jwt.sign(tokenPayload, process.env.JWT_SECRET, { expiresIn: '14d' });
         await client.query('COMMIT');
 
-        console.log(`Transaction successful for license: ${license}`);
+        const syncQuery = 'SELECT p.name, p.latest_version, p.patch_note, l.duration, a.activated_at FROM license l JOIN activation a ON a.license_id = l.id JOIN product p ON l.product_id = p.id WHERE l.user_id = $1';
+        const syncResult = await client.query(syncQuery, [foundLicense.user_id]);
+
+        const subscriptionsForClient = syncResult.rows.map(sub => {
+            const activationDate = new Date(sub.activated_at);
+            const expirationDate = new Date(activationDate);
+            expirationDate.setDate(activationDate.getDate() + sub.duration);
+            const today = new Date();
+            const timeDiff = expirationDate.getTime() - today.getTime();
+            const daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 3600 * 24)));
+
+            return {
+                product_name: sub.name,
+                latest_version: sub.latest_version,
+                patch_note: sub.patch_note,
+                days_remaining: daysRemaining
+            };
+        });
         return res.json({
             status: 'success',
             message: 'License activated successfully!',
-            token: sessionToken
+            token: sessionToken,
+            subscriptions: subscriptionsForClient // Include the initial subscription data
         });
+
     } catch (error) {
         if (client) await client.query('ROLLBACK');
         console.error("Something went wrong with the activation process:", error);
