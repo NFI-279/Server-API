@@ -8,12 +8,23 @@ function validateHandshake(expectedPurpose){
 
         try{
             if(!handshake_token)
-                return res.status(403).json({ error: 'Something went wrong.' });
+                return res.status(403).json({ error: 'Forbidden: Handshake token is missing.' });
 
             const cachedData = hashCache.get(client_ip);
 
-            if (!cachedData || Date.now() > cachedData.expires || expectedPurpose != cachedData.purpose)
-                return res.status(403).json({ error: 'Something went wrong.' });
+            if (!cachedData) {
+                return res.status(403).json({ error: 'Forbidden: No active handshake session found. Please restart.' });
+            }
+
+            if (Date.now() > cachedData.expires) {
+                hashCache.delete(client_ip); // Clean up the expired entry
+                return res.status(403).json({ error: 'Forbidden: Handshake session has expired. Please restart.' });
+            }
+
+             if (expectedPurpose !== cachedData.purpose) {
+                hashCache.delete(client_ip); 
+                return res.status(403).json({ error: 'Forbidden: Handshake purpose mismatch.' });
+            }
 
             const isMatch = await bcrypt.compare(handshake_token, cachedData.hash);
 
@@ -24,6 +35,7 @@ function validateHandshake(expectedPurpose){
                 next();
             }
         } catch (error) {
+            console.error("Error in validateHandshake middleware:", error);
             return res.status(500).json({ error: "An internal server error occurred." });
         }
     }
