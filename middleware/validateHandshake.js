@@ -1,6 +1,6 @@
 const { hashCache } = require('../config/security');
 const bcrypt = require('bcrypt'); 
-const { getClientIp } = require('../config/network');
+const { getClientIp } = require('../config/network.js');
 
 function validateHandshake(expectedPurpose){
    return async function (req, res, next) {
