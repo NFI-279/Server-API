@@ -5,12 +5,18 @@ function validateHandshake(expectedPurpose){
    return async function (req, res, next) {
         const handshake_token = req.body.handshake_token;
         const client_ip = req.ip;
-
+         console.log(`[VALIDATE_HANDSHAKE] Received request for purpose: '${expectedPurpose}' from REAL IP: ${client_ip}`);
+        const cachedData = hashCache.get(client_ip);
+        if (cachedData) {
+            console.log(`[VALIDATE_HANDSHAKE] Found cached data with purpose: '${cachedData.purpose}'`);
+        } else {
+            console.log(`[VALIDATE_HANDSHAKE] !!! : NO cached data found for this IP.`);
+        }
         try{
             if(!handshake_token)
                 return res.status(403).json({ error: 'Forbidden: Handshake token is missing.' });
 
-            const cachedData = hashCache.get(client_ip);
+            //const cachedData = hashCache.get(client_ip);
 
             if (!cachedData) {
                 return res.status(403).json({ error: 'Forbidden: No active handshake session found. Please restart.' });
