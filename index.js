@@ -8,6 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 app.use(express.json());
+app.set('trust proxy', 1);
 
 app.use('/api/v1/public', publicRoutes);
 app.use('/api/v1/secure', protectedRoutes);
