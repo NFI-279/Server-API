@@ -8,7 +8,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const validateHandshake = require('../middleware/validateHandshake.js')
 const { generateHandshake, PURPOSE_AWAITING_SYNC, PURPOSE_AWAITING_ACTIVATION } = require('../config/handshake');
-const { getClientIp } = require('../config/network');
+const { getClientIp } = require('../config/network.js');
 
 router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
     const { version: client_version, checksum: client_checksum, intent } = req.query;
