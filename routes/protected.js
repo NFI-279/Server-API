@@ -39,7 +39,7 @@ router.post('/sync', validateHandshake(PURPOSE_AWAITING_SYNC), authenticateToken
             };
         });
 
-       return res.json({ subscriptions: subscriptionsForClient });
+       return res.json(subscriptionsForClient);
     } catch (error) {
         console.error(`Error during sync for user ${userId}:`, error);
         return res.status(500).json({ error: 'An internal server error occurred.' });
