@@ -8,9 +8,11 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const validateHandshake = require('../middleware/validateHandshake.js')
 const { generateHandshake, PURPOSE_AWAITING_SYNC, PURPOSE_AWAITING_ACTIVATION } = require('../config/handshake');
-const { getClientIp } = require('../config/network.js');
+const { getClientIp } = require('../config/network');
+const verifySignature = require('../middleware/verifySignature');
+const verifyUserAgent = require('../middleware/verifyUserAgent');
 
-router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
+router.get(`/version-check`, versionCheckLimiter, verifyUserAgent, async (req, res) => {
     const { version: client_version, checksum: client_checksum, intent } = req.query;
     const client_ip = getClientIp(req);
 
@@ -69,7 +71,7 @@ router.get(`/version-check`, versionCheckLimiter, async (req, res) => {
 });
 
 
-router.post(`/activate`, activationLimiter, validateHandshake(PURPOSE_AWAITING_ACTIVATION), async (req, res) => {
+router.post(`/activate`, activationLimiter,  verifyUserAgent, validateHandshake(PURPOSE_AWAITING_ACTIVATION), verifySignature, async (req, res) => {
     const { license, hwid} = req.body;
     let client;
 
