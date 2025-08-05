@@ -17,7 +17,7 @@ const versionCheckLimiter = rateLimit({
 });
 
 function validateInputs(hwid, license){
-    if(typeof license !== 'string' || typeof hwid !== 'string' || license.length != 50 || hwid.length != 16)
+    if(typeof license !== 'string' || typeof hwid !== 'string' || license.length != 21 || hwid.length != 64)
         return false;
     return true;
 }
