@@ -7,19 +7,20 @@ function verifySignature(req, res, next) {
         return res.status(403).json({ error: 'Forbidden: Missing request signature' });
     }
 
-    if (!req.rawBody) {
-        console.error("Error: rawBody is not available. Check express.json middleware.");
-        return res.status(500).json({ error: 'Internal Server Error.' });
+    if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ error: 'Bad Request: Missing request body.' });
     }
 
     try {
         const secret = process.env.API_SHARED_SECRET;
         if (!secret) {
-            console.error("CRITICAL: API_SHARED_SECRET is not set.");
+            console.error("CRITICAL: API_SHARED_SECRET is not set");
             return res.status(500).json({ error: 'Internal Server Error.' });
         }
 
-        const string_to_hash = req.rawBody + secret;
+        const canonical_body = JSON.stringify(req.body);
+
+        const string_to_hash = canonical_body + secret;
         const expectedSignature = crypto
             .createHash('sha256')
             .update(string_to_hash)
@@ -33,11 +34,16 @@ function verifySignature(req, res, next) {
         if (signaturesMatch) {
             return next();
         } else {
-            return res.status(403).json({ error: 'Forbidden: Invalid request signature.' });
+            console.log("Signature Mismatch!");
+            console.log("Client sent:", signatureFromHeader);
+            console.log("Server expected:", expectedSignature);
+            console.log("Server used this body:", canonical_body);
+            return res.status(403).json({ error: 'Forbidden: Invalid request signature' });
         }
     } catch (error) {
-        return res.status(400).json({ error: 'Bad Request: Invalid signature format.' });
+        return res.status(400).json({ error: 'Bad Request: Invalid signature format' });
     }
 }
+
 
 module.exports = verifySignature;
