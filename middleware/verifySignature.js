@@ -7,9 +7,8 @@ function verifySignature(req, res, next) {
         return res.status(403).json({ error: 'Forbidden: Missing request signature' });
     }
 
-    if (!req.rawBody) {
-        console.error("Error: rawBody is not available");
-        return res.status(500).json({ error: 'Internal Server Error' });
+    if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).json({ error: 'Bad Request: Missing request body.' });
     }
 
     try {
@@ -19,10 +18,14 @@ function verifySignature(req, res, next) {
             return res.status(500).json({ error: 'Internal Server Error.' });
         }
 
-        const string_to_hash = req.rawBody + secret;
+        const keys = Object.keys(req.body);
+        keys.sort();
+        const string_to_hash = keys.map(key => req.body[key]).join('');
+
+
         const expectedSignature = crypto
             .createHash('sha256')
-            .update(string_to_hash)
+            .update(string_to_hash + secret)
             .digest('hex');
         
         const signaturesMatch = crypto.timingSafeEqual(
@@ -46,4 +49,5 @@ function verifySignature(req, res, next) {
 
 
 module.exports = verifySignature;
+
 
