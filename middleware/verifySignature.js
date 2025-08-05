@@ -34,6 +34,7 @@ function verifySignature(req, res, next) {
         );
 
         if (signaturesMatch) {
+            console.log("The signatures matched.");
             return next();
         } else {
             console.log("Signature Mismatch!");
@@ -49,5 +50,6 @@ function verifySignature(req, res, next) {
 
 
 module.exports = verifySignature;
+
 
 
