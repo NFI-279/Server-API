@@ -7,13 +7,7 @@ const protectedRoutes = require('./routes/protected');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
-app.use(express.json({
-    verify: (req, res, buf) => {
-        if (buf && buf.length) {
-            req.rawBody = buf.toString('utf8');
-        }
-    }
-}));
+app.use(express.json());
 
 
 app.set('trust proxy', 1);
