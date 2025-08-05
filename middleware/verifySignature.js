@@ -7,8 +7,9 @@ function verifySignature(req, res, next) {
         return res.status(403).json({ error: 'Forbidden: Missing request signature' });
     }
 
-    if (!req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).json({ error: 'Bad Request: Missing request body.' });
+    if (!req.rawBody) {
+        console.error("Error: rawBody is not available");
+        return res.status(500).json({ error: 'Internal Server Error' });
     }
 
     try {
@@ -18,9 +19,7 @@ function verifySignature(req, res, next) {
             return res.status(500).json({ error: 'Internal Server Error.' });
         }
 
-        const canonical_body = JSON.stringify(req.body);
-
-        const string_to_hash = canonical_body + secret;
+        const string_to_hash = req.rawBody + secret;
         const expectedSignature = crypto
             .createHash('sha256')
             .update(string_to_hash)
@@ -37,7 +36,7 @@ function verifySignature(req, res, next) {
             console.log("Signature Mismatch!");
             console.log("Client sent:", signatureFromHeader);
             console.log("Server expected:", expectedSignature);
-            console.log("Server used this body:", canonical_body);
+            console.log("Server used this raw body:", req.rawBody);
             return res.status(403).json({ error: 'Forbidden: Invalid request signature' });
         }
     } catch (error) {
@@ -47,3 +46,4 @@ function verifySignature(req, res, next) {
 
 
 module.exports = verifySignature;
+
